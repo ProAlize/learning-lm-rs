@@ -75,9 +75,7 @@ impl LLamaParams<f32> {
 
         let embedding_table = get_tensor("embed_tokens.weight")?;
         
-        // 手动复制embedding_table
         let lm_head = if config.tie_word_embeddings {
-            // 直接创建一个新的Tensor对象作为lm_head
             Tensor::new(embedding_table.data().to_vec(), &embedding_table.shape())
         } else {
             get_tensor("lm_head.weight")?
