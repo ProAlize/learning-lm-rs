@@ -73,7 +73,7 @@ impl LLamaParams<f32> {
             w_down.push(get_tensor(&format!("model.layers.{}.mlp.down_proj.weight", layer))?);
         }
 
-        let embedding_table = get_tensor("model.embed_tokens.weight")?;
+        let embedding_table = get_tensor("embed_tokens.weight")?;
         
         // 手动复制embedding_table
         let lm_head = if config.tie_word_embeddings {

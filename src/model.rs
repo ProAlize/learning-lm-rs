@@ -31,13 +31,13 @@ impl Llama<f32> {
         let model_file = std::fs::read(model_dir.as_ref().join("model.safetensors")).unwrap();
         let safetensor = SafeTensors::deserialize(&model_file).unwrap();
         //let params = LLamaParams::from_safetensors(&safetensor, &config);
-        //let params = LLamaParams::from_safetensors(&safetensor, &config).unwrap();
-        let params = match LLamaParams::from_safetensors(&safetensor, &config) {
+        let params = LLamaParams::from_safetensors(&safetensor, &config).unwrap();
+        /*let params = match LLamaParams::from_safetensors(&safetensor, &config) {
             Ok(p) => p,  // 如果是 Ok，取出 LLamaParams
             Err(e) => {
                 panic!("Failed to load params: {}", e); // 处理错误，打印出错误信息
             }
-        };
+        };*/
         
 
         Self {
@@ -198,10 +198,11 @@ fn mlp(
     OP::matmul_transb(up, 0.0, hidden_states, w_up, 1.0);     // up = hidden @ w_up.T
 
     // Step 3: SwiGLU activation (gate * sigmoid(gate) * up)
-    let gate_data = gate.data().to_vec(); // 先获取不可变数据
+    let gate_data = gate.data().to_vec(); 
     for i in 0..gate.size() {
+        let sig = 1.0 / (1.0 + (-gate_data[i]).exp());
         unsafe {
-            gate.data_mut()[i] = gate_data[i] * up.data()[i]; // 再修改数据
+            gate.data_mut()[i] = gate_data[i] * sig * up.data()[i];
         }
     }
 
