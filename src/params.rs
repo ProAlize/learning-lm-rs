@@ -39,8 +39,11 @@ impl LLamaParams<f32> {
         let get_tensor = |name: &str| -> Tensor<f32> {
             let tensor = safetensor.tensor(name).unwrap_or_else(|_| panic!("Tensor {} not found", name));
             let data = tensor.data().to_vec();
+            let data_f32: Vec<f32> = data.chunks_exact(4).map(|chunk| {
+                f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+            }).collect();
             let shape = tensor.shape().to_vec();
-            Tensor::new(data, &shape)
+            Tensor::new(data_f32, &shape)
         };
 
         let n_layers = config.num_hidden_layers;

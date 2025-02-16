@@ -190,15 +190,19 @@ fn mlp(
     OP::matmul_transb(up, 0.0, hidden_states, w_up, 1.0);     // up = hidden @ w_up.T
 
     // Step 3: SwiGLU activation (gate * sigmoid(gate) * up)
-    OP::swiglu(gate, gate); // gate = gate * sigmoid(gate)
+    let gate_data = gate.data().to_vec(); // 先获取不可变数据
     for i in 0..gate.size() {
-        gate.data_mut()[i] *= up.data()[i]; // gate = gate * up
+        unsafe {
+            gate.data_mut()[i] = gate_data[i] * up.data()[i]; // 再修改数据
+        }
     }
 
     // Step 4: Down projection and residual connection
     OP::matmul_transb(hidden_states, 0.0, gate, w_down, 1.0); // hidden_states = gate @ w_down.T
     for i in 0..residual.size() {
-        residual.data_mut()[i] += hidden_states.data()[i]; // residual = residual + hidden_states
+        unsafe {
+            residual.data_mut()[i] += hidden_states.data()[i]; // residual = residual + hidden_states
+        }
     }
 }
 
