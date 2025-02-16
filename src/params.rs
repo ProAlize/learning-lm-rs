@@ -36,47 +36,53 @@ impl LLamaParams<f32> {
 */
 impl LLamaParams<f32> {
     pub fn from_safetensors(safetensor: &SafeTensors, config: &LlamaConfigJson) -> Self {
+        // 定义一个从safetensor中读取Tensor的辅助函数
         let get_tensor = |name: &str| -> Tensor<f32> {
-            let tensor = safetensor.tensor(name).unwrap_or_else(|_| panic!("Tensor {} not found", name));
-            let data = tensor.data().to_vec();
-            let data_f32: Vec<f32> = data.chunks_exact(4).map(|chunk| {
-                f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]).clone()
-            }).collect();
-            let shape = tensor.shape().to_vec();
-            Tensor::new(data_f32, &shape)
+            let tensor_data = safetensor.tensor(name).unwrap(); // 从safetensor中获取tensor
+            let shape = tensor_data.shape().clone(); // 获取tensor的形状
+            Tensor::new(tensor_data.to_vec(), &shape) // 使用数据和形状创建Tensor
         };
 
-        let n_layers = config.num_hidden_layers;
+        // 从safetensor中加载各个参数
+        let embedding_table = get_tensor("embedding_table");
+        let rms_att_w = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("rms_att_w_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let wq = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("wq_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let wk = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("wk_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let wv = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("wv_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let wo = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("wo_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let rms_ffn_w = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("rms_ffn_w_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let w_up = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("w_up_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let w_gate = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("w_gate_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let w_down = (0..config.num_hidden_layers)
+            .map(|i| get_tensor(&format!("w_down_{}", i)))
+            .collect::<Vec<Tensor<f32>>>();
+        let rms_out_w = get_tensor("rms_out_w");
+        let lm_head = get_tensor("lm_head");
 
-        let mut rms_att_w = Vec::with_capacity(n_layers);
-        let mut wq = Vec::with_capacity(n_layers);
-        let mut wk = Vec::with_capacity(n_layers);
-        let mut wv = Vec::with_capacity(n_layers);
-        let mut wo = Vec::with_capacity(n_layers);
-        let mut rms_ffn_w = Vec::with_capacity(n_layers);
-        let mut w_up = Vec::with_capacity(n_layers);
-        let mut w_gate = Vec::with_capacity(n_layers);
-        let mut w_down = Vec::with_capacity(n_layers);
-
-        for layer in 0..n_layers {
-            rms_att_w.push(get_tensor(&format!("model.layers.{}.input_layernorm.weight", layer)));
-            wq.push(get_tensor(&format!("model.layers.{}.self_attn.q_proj.weight", layer)));
-            wk.push(get_tensor(&format!("model.layers.{}.self_attn.k_proj.weight", layer)));
-            wv.push(get_tensor(&format!("model.layers.{}.self_attn.v_proj.weight", layer)));
-            wo.push(get_tensor(&format!("model.layers.{}.self_attn.o_proj.weight", layer)));
-            rms_ffn_w.push(get_tensor(&format!("model.layers.{}.post_attention_layernorm.weight", layer)));
-            w_up.push(get_tensor(&format!("model.layers.{}.mlp.up_proj.weight", layer)));
-            w_gate.push(get_tensor(&format!("model.layers.{}.mlp.gate_proj.weight", layer)));
-            w_down.push(get_tensor(&format!("model.layers.{}.mlp.down_proj.weight", layer)));
-        }
-
-        let embedding_table = get_tensor("model.embed_tokens.weight");
-        let lm_head = if config.tie_word_embeddings {
-            embedding_table.clone()
+        // 如果配置中的tie_word_embeddings为true，则共享embedding矩阵
+        let embedding_table = if config.tie_word_embeddings {
+            let lm_head_data = lm_head.clone(); // 使用lm_head的权重作为embedding
+            embedding_table.set_data(lm_head_data.data().to_vec());
+            embedding_table
         } else {
-            get_tensor("lm_head.weight")
+            embedding_table
         };
-        let rms_out_w = get_tensor("model.norm.weight");
 
         LLamaParams {
             embedding_table,
