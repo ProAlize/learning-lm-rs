@@ -155,7 +155,7 @@ fn self_attention(
 ) {
     todo!("Implement self_attention");
 }
-
+/* 
 fn mlp(
     residual: &mut Tensor<f32>,
     hidden_states: &mut Tensor<f32>,
@@ -169,6 +169,39 @@ fn mlp(
 ) {
     todo!("Implement mlp");
 }
+*/
+
+fn mlp(
+    residual: &mut Tensor<f32>,
+    hidden_states: &mut Tensor<f32>,
+    gate: &mut Tensor<f32>,
+    up: &mut Tensor<f32>,
+    w_up: &Tensor<f32>,
+    w_down: &Tensor<f32>,
+    w_gate: &Tensor<f32>,
+    rms_w: &Tensor<f32>,
+    eps: f32,
+) {
+    // Step 1: RMS Normalization
+    OP::rms_norm(hidden_states, residual, rms_w, eps);
+
+    // Step 2: Compute gate and up
+    OP::matmul_transb(gate, 0.0, hidden_states, w_gate, 1.0); // gate = hidden @ w_gate.T
+    OP::matmul_transb(up, 0.0, hidden_states, w_up, 1.0);     // up = hidden @ w_up.T
+
+    // Step 3: SwiGLU activation (gate * sigmoid(gate) * up)
+    OP::swiglu(gate, gate); // gate = gate * sigmoid(gate)
+    for i in 0..gate.size() {
+        gate.data_mut()[i] *= up.data()[i]; // gate = gate * up
+    }
+
+    // Step 4: Down projection and residual connection
+    OP::matmul_transb(hidden_states, 0.0, gate, w_down, 1.0); // hidden_states = gate @ w_down.T
+    for i in 0..residual.size() {
+        residual.data_mut()[i] += hidden_states.data()[i]; // residual = residual + hidden_states
+    }
+}
+
 
 #[test]
 pub fn test_mlp() {
