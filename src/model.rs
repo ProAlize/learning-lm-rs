@@ -24,21 +24,14 @@ pub struct Llama<T> {
     eos_token_id: u32,      // end token id
 }
 
+
 impl Llama<f32> {
     pub fn from_safetensors(model_dir: impl AsRef<Path>) -> Self {
         let config = File::open(model_dir.as_ref().join("config.json")).unwrap();
         let config: LlamaConfigJson = serde_json::from_reader(config).unwrap();
         let model_file = std::fs::read(model_dir.as_ref().join("model.safetensors")).unwrap();
         let safetensor = SafeTensors::deserialize(&model_file).unwrap();
-        //let params = LLamaParams::from_safetensors(&safetensor, &config);
-        let params = LLamaParams::from_safetensors(&safetensor, &config).unwrap();
-        /*let params = match LLamaParams::from_safetensors(&safetensor, &config) {
-            Ok(p) => p,  // 如果是 Ok，取出 LLamaParams
-            Err(e) => {
-                panic!("Failed to load params: {}", e); // 处理错误，打印出错误信息
-            }
-        };*/
-        
+        let params = LLamaParams::from_safetensors(&safetensor, &config);
 
         Self {
             vocab: config.vocab_size,
@@ -57,6 +50,40 @@ impl Llama<f32> {
         }
     }
 
+/* 
+impl Llama<f32> {
+    pub fn from_safetensors(model_dir: impl AsRef<Path>) -> Self {
+        let config = File::open(model_dir.as_ref().join("config.json")).unwrap();
+        let config: LlamaConfigJson = serde_json::from_reader(config).unwrap();
+        let model_file = std::fs::read(model_dir.as_ref().join("model.safetensors")).unwrap();
+        let safetensor = SafeTensors::deserialize(&model_file).unwrap();
+        //let params = LLamaParams::from_safetensors(&safetensor, &config);
+        let params = LLamaParams::from_safetensors(&safetensor, &config).unwrap();
+        /*let params = match LLamaParams::from_safetensors(&safetensor, &config) {
+            Ok(p) => p,  // 如果是 Ok，取出 LLamaParams
+            Err(e) => {
+                panic!("Failed to load params: {}", e); // 处理错误，打印出错误信息
+            }
+        };
+        */
+
+        Self {
+            vocab: config.vocab_size,
+            n_layers: config.num_hidden_layers,
+            n_q_h: config.num_attention_heads,
+            n_kv_h: config.num_key_value_heads,
+            d: config.hidden_size,
+            dqkv: config.hidden_size / config.num_attention_heads,
+            di: config.intermediate_size,
+            eps: config.rms_norm_eps,
+            rope_theta: config.rope_theta,
+            max_seq_len: config.max_position_embeddings,
+            params: params,
+            bos_token_id: config.bos_token_id,
+            eos_token_id: config.eos_token_id,
+        }
+    }
+*/
     pub fn new_cache(&self) -> KVCache<f32> {
         KVCache::new(self.n_layers, self.max_seq_len, self.n_kv_h * self.dqkv, 0)
     }
