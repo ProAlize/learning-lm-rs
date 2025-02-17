@@ -23,6 +23,7 @@ pub struct Llama<T> {
     bos_token_id: u32,      // start token id
     eos_token_id: u32,      // end token id
 }
+
 impl Llama<f32> {
     pub fn from_safetensors(model_dir: impl AsRef<Path>) -> Self {
         let config = File::open(model_dir.as_ref().join("config.json")).unwrap();
@@ -42,39 +43,12 @@ impl Llama<f32> {
             eps: config.rms_norm_eps,
             rope_theta: config.rope_theta,
             max_seq_len: config.max_position_embeddings,
-            params: params.unwrap(),
-            bos_token_id: config.bos_token_id,
-            eos_token_id: config.eos_token_id,
-        }
-    }
-/* 
-impl Llama<f32> {
-    pub fn from_safetensors(model_dir: impl AsRef<Path>) -> Self {
-        let config = File::open(model_dir.as_ref().join("config.json")).unwrap();
-        let config: LlamaConfigJson = serde_json::from_reader(config).unwrap();
-        let model_file = std::fs::read(model_dir.as_ref().join("model.safetensors")).unwrap();
-        let safetensor = SafeTensors::deserialize(&model_file).unwrap();
-        //let params = LLamaParams::from_safetensors(&safetensor, &config);
-        let params = LLamaParams::from_safetensors(&safetensor, &config).unwrap();
-
-
-        Self {
-            vocab: config.vocab_size,
-            n_layers: config.num_hidden_layers,
-            n_q_h: config.num_attention_heads,
-            n_kv_h: config.num_key_value_heads,
-            d: config.hidden_size,
-            dqkv: config.hidden_size / config.num_attention_heads,
-            di: config.intermediate_size,
-            eps: config.rms_norm_eps,
-            rope_theta: config.rope_theta,
-            max_seq_len: config.max_position_embeddings,
             params: params,
             bos_token_id: config.bos_token_id,
             eos_token_id: config.eos_token_id,
         }
     }
-*/
+
     pub fn new_cache(&self) -> KVCache<f32> {
         KVCache::new(self.n_layers, self.max_seq_len, self.n_kv_h * self.dqkv, 0)
     }
@@ -181,21 +155,6 @@ fn self_attention(
 ) {
     todo!("Implement self_attention");
 }
-/* 
-fn mlp(
-    residual: &mut Tensor<f32>,
-    hidden_states: &mut Tensor<f32>,
-    gate: &mut Tensor<f32>,
-    up: &mut Tensor<f32>,
-    w_up: &Tensor<f32>,
-    w_down: &Tensor<f32>,
-    w_gate: &Tensor<f32>,
-    rms_w: &Tensor<f32>,
-    eps: f32,
-) {
-    todo!("Implement mlp");
-}
-*/
 
 fn mlp(
     residual: &mut Tensor<f32>,
@@ -208,31 +167,12 @@ fn mlp(
     rms_w: &Tensor<f32>,
     eps: f32,
 ) {
-    // Step 1: RMS Normalization
     OP::rms_norm(hidden_states, residual, rms_w, eps);
-
-    // Step 2: Compute gate and up
-    OP::matmul_transb(gate, 0.0, hidden_states, w_gate, 1.0); // gate = hidden @ w_gate.T
-    OP::matmul_transb(up, 0.0, hidden_states, w_up, 1.0);     // up = hidden @ w_up.T
-
-    // Step 3: SwiGLU activation (gate * sigmoid(gate) * up)
-    let gate_data = gate.data().to_vec(); 
-    for i in 0..gate.size() {
-        let sig = 1.0 / (1.0 + (-gate_data[i]).exp());
-        unsafe {
-            gate.data_mut()[i] = gate_data[i] * sig * up.data()[i];
-        }
-    }
-
-    // Step 4: Down projection and residual connection
-    OP::matmul_transb(hidden_states, 0.0, gate, w_down, 1.0); // hidden_states = gate @ w_down.T
-    for i in 0..residual.size() {
-        unsafe {
-            residual.data_mut()[i] += hidden_states.data()[i]; // residual = residual + hidden_states
-        }
-    }
+    OP::matmul_transb(gate, 0.0, hidden_states, w_gate, 1.0);
+    OP::matmul_transb(up, 0.0, hidden_states, w_up, 1.0);
+    OP::swiglu(up, gate);
+    OP::matmul_transb(residual, 1.0, up, w_down, 1.0);
 }
-
 
 #[test]
 pub fn test_mlp() {

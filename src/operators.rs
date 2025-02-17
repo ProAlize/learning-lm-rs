@@ -1,3 +1,4 @@
+
 use crate::tensor::Tensor;
 
 // get (row) vectors from a 2D table given a list of indices
@@ -69,96 +70,70 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
         }
     }
 }
-/* 
-pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
-}
-*/
 
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    assert_eq!(x.shape(), y.shape(), "x and y must have the same shape");
-    let x_shape = x.shape();
-    let d = *x_shape.last().expect("x must have at least one dimension");
-    assert_eq!(w.shape(), &[d], "w's shape must be [{}]", d);
+    assert!(x.shape() == y.shape());
+    assert!(w.shape().len() == 1);
+    
+    let shape : &Vec<usize> = x.shape();
+    let last_dim = *shape.last().unwrap();
+    assert!(last_dim == w.size());
 
+    let y_data = unsafe { y.data_mut() };
     let x_data = x.data();
     let w_data = w.data();
-    let y_data = unsafe { y.data_mut() };
-    let batch_size = x.size() / d;
-
+    
+    let batch_size = x.size() / last_dim;
     for i in 0..batch_size {
-        let start = i * d;
-        let x_slice = &x_data[start..start + d];
-        let sum_sq: f32 = x_slice.iter().map(|v| v.powi(2)).sum();
-        let rms = (sum_sq / d as f32 + epsilon).sqrt();
-        for j in 0..d {
-            y_data[start + j] = (x_slice[j] / rms) * w_data[j];
+        let base = i * last_dim;
+        let mean_square = (0..last_dim).map(|j| x_data[base+j].powi(2)).sum::<f32>()
+                / last_dim as f32;
+        let rms = (mean_square + epsilon).sqrt();
+        for j in 0..last_dim {
+            y_data[base+j] = (x_data[base+j] * w_data[j]) / rms;
+            println!("{}",&y_data[base+j]);
         }
     }
 }
 
 // y = silu(x) * y
 // hint: this is an element-wise operation
-/* 
-pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
-    // let len = y.size();
-    // assert!(len == x.size());
-
-    // let _y = unsafe { y.data_mut() };
-    // let _x = x.data();
-
-    todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
-}
-*/
-
 pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
     let len = y.size();
     assert!(len == x.size());
 
     let y_data = unsafe { y.data_mut() };
     let x_data = x.data();
-
+    
     for i in 0..len {
-        let x_val = x_data[i];
-        let sig = 1.0 / (1.0 + (-x_val).exp());
-        let silu = x_val * sig;
-        y_data[i] *= silu;
+        let x_sigmoid = 1.0 / (1.0+ (-x_data[i]).exp());
+        let silu = x_sigmoid * x_data[i];
+        y_data[i] = silu * y_data[i];
     }
 }
 
-
-
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
-/* 
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
-}
-*/
-
-pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    assert_eq!(a.shape().len(), 2);
-    assert_eq!(b.shape().len(), 2);
-    assert_eq!(c.shape().len(), 2);
-
-    let m = a.shape()[0];
-    let k = a.shape()[1];
-    let n = b.shape()[0];
-    assert_eq!(b.shape()[1], k, "A and B columns mismatch");
-    assert_eq!(c.shape(), &[m, n], "C shape mismatch");
+    let m = a.shape().get(0).unwrap();
+    let k = a.shape().get(1).unwrap();
+    let n = b.shape().get(0).unwrap();
+    let _k = b.shape().get(1).unwrap();
+    assert!(k==_k);
+    assert!(c.shape().get(0).unwrap()==m);
+    assert!(c.shape().get(1).unwrap()==n);
 
     let a_data = a.data();
     let b_data = b.data();
     let c_data = unsafe { c.data_mut() };
-
-    for i in 0..m {
-        for j in 0..n {
-            let mut sum = 0.0;
-            for l in 0..k {
-                sum += a_data[i * k + l] * b_data[j * k + l];
+    let dim = *k;
+    for i in 0..*m {
+        for j in 0..*n{
+            let mut dot : f32 = 0.0;
+            for k in 0..dim {
+                dot += a_data[i*dim+k] * b_data[j*dim+k];
             }
-            let idx = i * n + j;
-            c_data[idx] = beta * c_data[idx] + alpha * sum;
+            c_data[i*n+j] = beta * c_data[i*n+j] + alpha * dot;
         }
     }
 }
